@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use crate::error::{SporeError, SporeResult};
 
-pub const DEFAULT_SPOTIFY_CLIENT_ID: &str = "01127027ae4d4f8287e0766ef5889ec1";
-pub const REDIRECT_URI: &str = "http://127.0.0.1:8888/callback";
+pub const DEFAULT_SPOTIFY_CLIENT_ID: &str = "d420a117a32841c2b3474932e49fb54b";
+pub const REDIRECT_URI: &str = "http://127.0.0.1:8888/login";
 pub const SCOPES: &str = "user-read-private user-read-email playlist-read-private playlist-read-collaborative user-library-read user-read-playback-state user-modify-playback-state";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -91,7 +91,7 @@ pub async fn listen_for_code(port: u16, timeout_secs: u64) -> SporeResult<String
             let n = stream.read(&mut buf).await.map_err(SporeError::Io)?;
             let req = String::from_utf8_lossy(&buf[..n]);
 
-            if req.contains("GET /callback") {
+            if req.contains("GET /login") || req.contains("GET /callback") {
                 let html = "<!DOCTYPE html><html><body style=\"background:#121212;color:#1DB954;font-family:sans-serif;text-align:center;padding:50px;\"><h2>Spore: Autenticacion Exitosa</h2><p style=\"color:#fff;\">Puedes regresar a la terminal.</p></body></html>";
                 let resp = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}", html.len(), html);
                 let _ = stream.write_all(resp.as_bytes()).await;

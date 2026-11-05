@@ -63,23 +63,19 @@ pub fn render_help(frame: &mut Frame<'_>, area: Rect, app: &TuiApp, nav_line: Li
 
     if app.language == Language::Es {
         auth_content.extend_from_slice(&[
-            Line::from(vec![Span::styled("Configurar Spotify Client ID:", Style::default().bold().fg(Color::Yellow))]),
-            Line::from(vec![Span::styled("1. Ve a developer.spotify.com/dashboard", Style::default())]),
-            Line::from(vec![Span::styled("2. Crea una App y añade Redirect URI:", Style::default())]),
-            Line::from(vec![Span::styled("   http://127.0.0.1:8888/callback", Style::default().fg(Color::Green))]),
-            Line::from(vec![Span::styled("3. En PowerShell ejecuta:", Style::default())]),
-            Line::from(vec![Span::styled("   $env:SPOTIFY_CLIENT_ID=\"tu_client_id\"", Style::default().italic().fg(Color::Green))]),
-            Line::from(vec![Span::styled("4. Presiona 'u' en Spore para autorizar", Style::default())]),
+            Line::from(vec![Span::styled("Inicio de Sesión Automático:", Style::default().bold().fg(Color::Yellow))]),
+            Line::from(vec![Span::styled("1. Presiona 'u' en cualquier momento.", Style::default())]),
+            Line::from(vec![Span::styled("2. Se abrirá la web oficial de Spotify.", Style::default())]),
+            Line::from(vec![Span::styled("3. Haz clic en 'Aceptar' para autorizar Spore.", Style::default().fg(Color::Green))]),
+            Line::from(vec![Span::styled("4. ¡Listo! Tu sesión quedará guardada.", Style::default().italic().fg(Color::Green))]),
         ]);
     } else {
         auth_content.extend_from_slice(&[
-            Line::from(vec![Span::styled("Setup Spotify Client ID:", Style::default().bold().fg(Color::Yellow))]),
-            Line::from(vec![Span::styled("1. Go to developer.spotify.com/dashboard", Style::default())]),
-            Line::from(vec![Span::styled("2. Create an App & add Redirect URI:", Style::default())]),
-            Line::from(vec![Span::styled("   http://127.0.0.1:8888/callback", Style::default().fg(Color::Green))]),
-            Line::from(vec![Span::styled("3. In terminal run:", Style::default())]),
-            Line::from(vec![Span::styled("   $env:SPOTIFY_CLIENT_ID=\"your_client_id\"", Style::default().italic().fg(Color::Green))]),
-            Line::from(vec![Span::styled("4. Press 'u' in Spore to authorize", Style::default())]),
+            Line::from(vec![Span::styled("Automatic Login:", Style::default().bold().fg(Color::Yellow))]),
+            Line::from(vec![Span::styled("1. Press 'u' at any time.", Style::default())]),
+            Line::from(vec![Span::styled("2. Official Spotify auth page will open.", Style::default())]),
+            Line::from(vec![Span::styled("3. Click 'Agree' to authorize Spore.", Style::default().fg(Color::Green))]),
+            Line::from(vec![Span::styled("4. All set! Your session is saved.", Style::default().italic().fg(Color::Green))]),
         ]);
     }
 
