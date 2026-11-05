@@ -10,6 +10,7 @@ pub mod i18n;
 pub mod lyrics;
 pub mod models;
 pub mod queue;
+pub mod spectrum;
 pub mod transliteration;
 
 pub use audio::NativeAudioEngine;

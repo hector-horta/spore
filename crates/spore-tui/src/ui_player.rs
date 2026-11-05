@@ -98,8 +98,8 @@ let srow = |r: u8, c: Color, v_spans: Vec<Span<'static>>| -> Line<'static> {
     let mut v = get_glyph_spans(r);
     v.push(Span::raw("  "));
     for b in 0..12 {
-        let val = spec[(b * 32) / 12];
-        let idx = if val == 0.0 && r == 0 { 1 } else { ((val - (r as f32 * 8.0)).clamp(0.0, 8.0)) as usize };
+        let val = spec[b] * 24.0;
+        let idx = if val < 0.5 && r == 0 { 1 } else { ((val - (r as f32 * 8.0)).clamp(0.0, 8.0)) as usize };
         let ch = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'][idx];
         let ch_str = ch.to_string();
         for col_idx in 0..4 {

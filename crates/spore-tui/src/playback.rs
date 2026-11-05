@@ -4,7 +4,7 @@ use crate::artwork::TerminalCoverArt;
 
 #[allow(dead_code)]
 pub enum BgEvent {
-    AudioReady(Track, Result<AudioStreamSource, String>, Vec<spore_core::LyricLine>, String),
+    AudioReady(Track, Result<crate::audio_prep::PreparedAudio, String>, Vec<spore_core::LyricLine>, String),
     ArtworkReady(String, TerminalCoverArt),
     PlaylistReady(String, Result<Vec<Track>, String>),
     PlaylistsSynced(Result<Vec<spore_core::UserPlaylist>, String>),
@@ -18,28 +18,15 @@ impl TuiApp {
                     if self.current_track.as_ref().map(|t| t.id == track.id).unwrap_or(true) {
                         self.current_lyrics = lyrics;
                         match res {
-                            Ok(AudioStreamSource::RawEncoded { bytes, extension }) => {
-                                match self.audio.play_encoded_bytes(bytes, extension) {
-                                    Ok(()) => {
-                                        self.audio.set_volume(self.volume);
-                                        self.status_message = hint;
-                                        self.current_track = Some(track);
-                                        self.trigger_prefetch_next();
-                                    }
-                                    Err(e) => self.status_message = format!("Error de audio: {e}"),
+                            Ok(p) => match self.audio.play_pcm_samples(p.channels, p.sample_rate, p.samples, Some(p.spectrum)) {
+                                Ok(()) => {
+                                    self.audio.set_volume(self.volume);
+                                    self.status_message = hint;
+                                    self.current_track = Some(track);
+                                    self.trigger_prefetch_next();
                                 }
-                            }
-                            Ok(AudioStreamSource::PcmDirect { samples, sample_rate, channels }) => {
-                                match self.audio.play_pcm_samples(channels, sample_rate, samples) {
-                                    Ok(()) => {
-                                        self.audio.set_volume(self.volume);
-                                        self.status_message = hint;
-                                        self.current_track = Some(track);
-                                        self.trigger_prefetch_next();
-                                    }
-                                    Err(e) => self.status_message = format!("Error de audio: {e}"),
-                                }
-                            }
+                                Err(e) => self.status_message = format!("Error de audio: {e}"),
+                            },
                             Err(e) => self.status_message = e,
                         }
                     }
@@ -87,9 +74,10 @@ impl TuiApp {
         self.play_task = Some(tokio::spawn(async move {
             if let Some(cached_bytes) = cache.get(&orig_id) {
                 let lyrics = backend.fetch_lyrics(&track).await.unwrap_or_default();
+                let prepared = crate::audio_prep::prepare_async(Ok(AudioStreamSource::RawEncoded { bytes: cached_bytes, extension: "ogg" })).await;
                 let _ = tx.send(BgEvent::AudioReady(
                     track.clone(),
-                    Ok(AudioStreamSource::RawEncoded { bytes: cached_bytes, extension: "ogg" }),
+                    prepared,
                     lyrics,
                     "[Spotify | Caché]".to_string(),
                 ));
@@ -104,9 +92,10 @@ impl TuiApp {
             }
 
             let hint = "[Spotify Ogg 320k]".to_string();
+            let prepared = crate::audio_prep::prepare_async(stream_res.map_err(|e| e.to_string())).await;
             let _ = tx.send(BgEvent::AudioReady(
                 track.clone(),
-                stream_res.map_err(|e| e.to_string()),
+                prepared,
                 lyrics,
                 hint,
             ));

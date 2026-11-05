@@ -1,7 +1,9 @@
 mod app;
 mod artwork;
+mod audio_prep;
 mod navigation;
 mod playback;
+mod spectrum_smoother;
 mod ui;
 mod ui_help;
 mod ui_lyrics;
@@ -50,9 +52,10 @@ async fn run_event_loop(
     while !app.should_quit {
         app.poll_bg_events().await;
         app.check_auto_advance().await;
+        app.tick_spectrum();
         terminal.draw(|f| ui::render(f, app))?;
 
-        if event::poll(Duration::from_millis(50))? {
+        if event::poll(Duration::from_millis(16))? {
             if let Event::Key(key_event) = event::read()? {
                 if key_event.kind != KeyEventKind::Press {
                     continue;
