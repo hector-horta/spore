@@ -76,11 +76,25 @@ impl SpotifyBackend {
 
     fn open_browser(url: &str) {
         #[cfg(target_os = "windows")]
-        let _ = std::process::Command::new("cmd").args(["/c", "start", "", url]).spawn();
+        {
+            let res = std::process::Command::new("rundll32.exe")
+                .args(["url.dll,FileProtocolHandler", url])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn();
+            if res.is_err() {
+                let escaped_url = url.replace('&', "^&");
+                let _ = std::process::Command::new("cmd")
+                    .args(["/c", "start", "", &escaped_url])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn();
+            }
+        }
         #[cfg(target_os = "macos")]
-        let _ = std::process::Command::new("open").arg(url).spawn();
-        #[cfg(target_os = "linux")]
-        let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+        let _ = std::process::Command::new("open").arg(url).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        let _ = std::process::Command::new("xdg-open").arg(url).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
     }
 }
 
@@ -218,9 +232,7 @@ impl StreamingBackend for SpotifyBackend {
         let auth_url = build_authorize_url(&client_id, &pkce);
         Self::open_browser(&auth_url);
 
-        let code = tokio::task::spawn_blocking(move || {
-            listen_for_code(8888, 60)
-        }).await.map_err(|e| SporeError::Auth(format!("Error en tarea de callback: {e}")))??;
+        let code = listen_for_code(8888, 60).await?;
 
         let tokens = exchange_code_for_tokens(&self.http, &client_id, &code, &pkce.verifier).await?;
         tokens.save_to_disk()?;

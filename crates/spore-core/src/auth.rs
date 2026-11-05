@@ -1,7 +1,7 @@
-use std::io::{Read, Write};
-use std::net::TcpListener;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use reqwest::Client;
@@ -81,29 +81,39 @@ pub fn build_authorize_url(client_id: &str, pkce: &PkceSession) -> String {
     )
 }
 
-pub fn listen_for_code(port: u16, timeout_secs: u64) -> SporeResult<String> {
-    let listener = TcpListener::bind(("127.0.0.1", port)).map_err(SporeError::Io)?;
-    listener.set_nonblocking(false).map_err(SporeError::Io)?;
+pub async fn listen_for_code(port: u16, timeout_secs: u64) -> SporeResult<String> {
+    let listener = TcpListener::bind(("127.0.0.1", port)).await.map_err(SporeError::Io)?;
 
-    let (mut stream, _) = listener.accept().map_err(SporeError::Io)?;
-    stream.set_read_timeout(Some(Duration::from_secs(timeout_secs))).map_err(SporeError::Io)?;
+    let accept_loop = async {
+        loop {
+            let (mut stream, _) = listener.accept().await.map_err(SporeError::Io)?;
+            let mut buf = [0u8; 2048];
+            let n = stream.read(&mut buf).await.map_err(SporeError::Io)?;
+            let req = String::from_utf8_lossy(&buf[..n]);
 
-    let mut buf = [0u8; 2048];
-    let n = stream.read(&mut buf).map_err(SporeError::Io)?;
-    let req = String::from_utf8_lossy(&buf[..n]);
+            if req.contains("GET /callback") {
+                let html = "<!DOCTYPE html><html><body style=\"background:#121212;color:#1DB954;font-family:sans-serif;text-align:center;padding:50px;\"><h2>Spore: Autenticacion Exitosa</h2><p style=\"color:#fff;\">Puedes regresar a la terminal.</p></body></html>";
+                let resp = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}", html.len(), html);
+                let _ = stream.write_all(resp.as_bytes()).await;
 
-    let html = "<!DOCTYPE html><html><body style=\"background:#121212;color:#1DB954;font-family:sans-serif;text-align:center;padding:50px;\"><h2>Spore: Autenticacion Exitosa</h2><p style=\"color:#fff;\">Puedes regresar a la terminal.</p></body></html>";
-    let resp = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}", html.len(), html);
-    let _ = stream.write_all(resp.as_bytes());
+                let code = req.lines().next()
+                    .and_then(|line| line.split_whitespace().nth(1))
+                    .and_then(|path| path.split('?').nth(1))
+                    .and_then(|query| query.split('&').find(|pair| pair.starts_with("code=")))
+                    .and_then(|pair| pair.strip_prefix("code="))
+                    .ok_or_else(|| SporeError::Auth("No se encontro el codigo de autorizacion en el callback".to_string()))?;
 
-    let code = req.lines().next()
-        .and_then(|line| line.split_whitespace().nth(1))
-        .and_then(|path| path.split('?').nth(1))
-        .and_then(|query| query.split('&').find(|pair| pair.starts_with("code=")))
-        .and_then(|pair| pair.strip_prefix("code="))
-        .ok_or_else(|| SporeError::Auth("No se encontro el codigo de autorizacion en el callback".to_string()))?;
+                return Ok(code.to_string());
+            } else {
+                let not_found = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+                let _ = stream.write_all(not_found.as_bytes()).await;
+            }
+        }
+    };
 
-    Ok(code.to_string())
+    tokio::time::timeout(Duration::from_secs(timeout_secs), accept_loop)
+        .await
+        .map_err(|_| SporeError::Auth("Tiempo de espera agotado esperando el login en el navegador (60s)".to_string()))?
 }
 
 #[derive(Deserialize)]
