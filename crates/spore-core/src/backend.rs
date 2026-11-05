@@ -74,22 +74,35 @@ impl SpotifyBackend {
         Some(tokens.access_token.clone())
     }
 
+    async fn get_authed_json(&self, url: &str) -> SporeResult<serde_json::Value> {
+        let Some(token) = self.ensure_valid_token().await else {
+            return Err(SporeError::Auth("Inicia sesión presionando 'u'.".to_string()));
+        };
+        let mut resp = self.http.get(url).bearer_auth(&token).send().await.map_err(SporeError::Network)?;
+        if resp.status().as_u16() == 429 {
+            let wait = resp.headers().get("retry-after").and_then(|v| v.to_str().ok()).and_then(|s| s.parse::<u64>().ok()).unwrap_or(3);
+            if wait <= 4 {
+                tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+                resp = self.http.get(url).bearer_auth(&token).send().await.map_err(SporeError::Network)?;
+            }
+            if resp.status().as_u16() == 429 {
+                return Err(SporeError::Spotify(format!("Cuota pública saturada (429). Espera {wait}s")));
+            }
+        }
+        if !resp.status().is_success() {
+            return Err(SporeError::Spotify(format!("Spotify API error: {}", resp.status())));
+        }
+        resp.json().await.map_err(SporeError::Network)
+    }
+
     fn open_browser(url: &str) {
         #[cfg(target_os = "windows")]
         {
-            let res = std::process::Command::new("rundll32.exe")
+            let _ = std::process::Command::new("rundll32.exe")
                 .args(["url.dll,FileProtocolHandler", url])
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .spawn();
-            if res.is_err() {
-                let escaped_url = url.replace('&', "^&");
-                let _ = std::process::Command::new("cmd")
-                    .args(["/c", "start", "", &escaped_url])
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .spawn();
-            }
         }
         #[cfg(target_os = "macos")]
         let _ = std::process::Command::new("open").arg(url).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
@@ -154,11 +167,7 @@ impl StreamingBackend for SpotifyBackend {
     }
 
     async fn fetch_user_library(&self) -> SporeResult<Vec<Track>> {
-        let Some(token) = self.ensure_valid_token().await else {
-            return Err(SporeError::Auth("Inicia sesion presionando 'u' para ver tus canciones guardadas.".to_string()));
-        };
-        let resp = self.http.get("https://api.spotify.com/v1/me/tracks?limit=50").bearer_auth(&token).send().await.map_err(SporeError::Network)?;
-        let json: serde_json::Value = resp.json().await.map_err(SporeError::Network)?;
+        let json = self.get_authed_json("https://api.spotify.com/v1/me/tracks?limit=50").await?;
         let mut tracks = Vec::new();
         if let Some(items) = json.get("items").and_then(|v| v.as_array()) {
             for item in items {
@@ -169,11 +178,7 @@ impl StreamingBackend for SpotifyBackend {
     }
 
     async fn fetch_user_playlists(&self) -> SporeResult<Vec<UserPlaylist>> {
-        let Some(token) = self.ensure_valid_token().await else {
-            return Err(SporeError::Auth("Inicia sesion presionando 'u' para sincronizar tus playlists.".to_string()));
-        };
-        let resp = self.http.get("https://api.spotify.com/v1/me/playlists?limit=50").bearer_auth(&token).send().await.map_err(SporeError::Network)?;
-        let json: serde_json::Value = resp.json().await.map_err(SporeError::Network)?;
+        let json = self.get_authed_json("https://api.spotify.com/v1/me/playlists?limit=50").await?;
         let mut playlists = Vec::new();
         if let Some(items) = json.get("items").and_then(|v| v.as_array()) {
             for item in items {
@@ -188,12 +193,8 @@ impl StreamingBackend for SpotifyBackend {
     }
 
     async fn fetch_playlist_tracks(&self, playlist_id: &str) -> SporeResult<Vec<Track>> {
-        let Some(token) = self.ensure_valid_token().await else {
-            return Err(SporeError::Auth("Inicia sesion presionando 'u'.".to_string()));
-        };
         let url = format!("https://api.spotify.com/v1/playlists/{}/tracks?limit=50", playlist_id);
-        let resp = self.http.get(&url).bearer_auth(&token).send().await.map_err(SporeError::Network)?;
-        let json: serde_json::Value = resp.json().await.map_err(SporeError::Network)?;
+        let json = self.get_authed_json(&url).await?;
         let mut tracks = Vec::new();
         if let Some(items) = json.get("items").and_then(|v| v.as_array()) {
             for item in items {
