@@ -29,7 +29,7 @@ pub trait StreamingBackend: Send + Sync {
     fn fetch_user_library(&self) -> impl std::future::Future<Output = SporeResult<Vec<Track>>> + Send;
     fn fetch_user_playlists(&self) -> impl std::future::Future<Output = SporeResult<Vec<UserPlaylist>>> + Send;
     fn fetch_playlist_tracks(&self, playlist_id: &str) -> impl std::future::Future<Output = SporeResult<Vec<Track>>> + Send;
-    fn resolve_stream(&self, track_id: &str) -> impl std::future::Future<Output = SporeResult<AudioStreamSource>> + Send;
+    fn resolve_stream(&self, track: &Track) -> impl std::future::Future<Output = SporeResult<AudioStreamSource>> + Send;
     fn fetch_lyrics(&self, track: &Track) -> impl std::future::Future<Output = SporeResult<Vec<LyricLine>>> + Send;
     fn login(&mut self) -> impl std::future::Future<Output = SporeResult<()>> + Send;
     fn is_logged_in(&self) -> bool;
@@ -204,22 +204,23 @@ impl StreamingBackend for SpotifyBackend {
         Ok(tracks)
     }
 
-    async fn resolve_stream(&self, track_id: &str) -> SporeResult<AudioStreamSource> {
-        if let Some(token) = self.ensure_valid_token().await {
-            let url = format!("https://api.spotify.com/v1/tracks/{}", track_id);
-            if let Ok(resp) = self.http.get(&url).bearer_auth(&token).send().await {
-                if let Ok(json) = resp.json::<serde_json::Value>().await {
-                    if let Some(prev) = json.get("preview_url").and_then(|v| v.as_str()) {
-                        if let Ok(bytes) = self.http.get(prev).send().await {
-                            if let Ok(b) = bytes.bytes().await {
-                                return Ok(AudioStreamSource::RawEncoded { bytes: b.to_vec(), extension: "mp3" });
-                            }
-                        }
-                    }
-                }
-            }
+    async fn resolve_stream(&self, track: &Track) -> SporeResult<AudioStreamSource> {
+        let stream_url = if let Some(ref p) = track.preview_url {
+            Some(p.clone())
+        } else {
+            let q = format!("{} {}", track.artist, track.title);
+            let itunes = format!("https://itunes.apple.com/search?term={}&entity=song&limit=1", urlencoding(&q));
+            let r = self.http.get(&itunes).send().await.ok();
+            let j: Option<serde_json::Value> = match r { Some(res) => res.json().await.ok(), None => None };
+            j.as_ref().and_then(|v| v.pointer("/results/0/previewUrl")).and_then(|s| s.as_str()).map(|s| s.to_string())
+        };
+
+        if let Some(url) = stream_url {
+            let resp = self.http.get(&url).send().await.map_err(SporeError::Network)?;
+            let bytes = resp.bytes().await.map_err(SporeError::Network)?;
+            return Ok(AudioStreamSource::RawEncoded { bytes: bytes.to_vec(), extension: "m4a" });
         }
-        Err(SporeError::Spotify("Audio stream no disponible sin Spotify Connect / Premium".to_string()))
+        Err(SporeError::Spotify("Audio stream no disponible para esta canción".to_string()))
     }
 
     async fn fetch_lyrics(&self, track: &Track) -> SporeResult<Vec<LyricLine>> {

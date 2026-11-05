@@ -91,7 +91,7 @@ impl TuiApp {
                 return;
             }
 
-            let stream_res = backend.resolve_stream(&orig_id).await;
+            let stream_res = backend.resolve_stream(&track).await;
             let lyrics = backend.fetch_lyrics(&track).await.unwrap_or_default();
 
             if let Ok(AudioStreamSource::RawEncoded { ref bytes, .. }) = stream_res {
@@ -174,7 +174,7 @@ impl TuiApp {
         let cache = self.audio_cache.clone();
         let backend = self.backend.clone();
         tokio::spawn(async move {
-            if let Ok(AudioStreamSource::RawEncoded { bytes, .. }) = backend.resolve_stream(&next_track.id).await {
+            if let Ok(AudioStreamSource::RawEncoded { bytes, .. }) = backend.resolve_stream(&next_track).await {
                 let _ = cache.put(&next_track.id, &bytes);
                 cache.evict_if_needed();
             }
