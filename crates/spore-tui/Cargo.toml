@@ -1,0 +1,20 @@
+[package]
+name = "spore-tui"
+version = "0.1.0"
+edition = "2024"
+authors = ["Hector Horta"]
+license = "MIT"
+
+[[bin]]
+name = "spore"
+path = "src/main.rs"
+
+[dependencies]
+spore-core = { path = "../spore-core" }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+image = { workspace = true }
