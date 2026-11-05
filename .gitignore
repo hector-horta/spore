@@ -2,6 +2,9 @@
 **/*.rs.bk
 *.sqlite
 *.db
+*.db-*
+*.db-shm
+*.db-wal
 *.bin
 *.part
 spore_cache.db
