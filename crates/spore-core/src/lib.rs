@@ -2,6 +2,7 @@
 
 pub mod audio;
 pub mod audio_cache;
+pub mod auth;
 pub mod backend;
 pub mod db;
 pub mod error;
@@ -13,6 +14,7 @@ pub mod transliteration;
 
 pub use audio::NativeAudioEngine;
 pub use audio_cache::AudioCache;
+pub use auth::{SpotifyTokens, PkceSession};
 pub use backend::{AudioStreamSource, SectionType, SpotifyBackend, StreamingBackend};
 pub use db::CatalogStore;
 pub use error::{SporeError, SporeResult};
