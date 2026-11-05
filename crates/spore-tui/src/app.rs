@@ -62,6 +62,7 @@ pub struct TuiApp {
     pub(crate) bg_rx: tokio::sync::mpsc::UnboundedReceiver<crate::playback::BgEvent>,
     pub(crate) play_task: Option<tokio::task::JoinHandle<()>>,
     pub(crate) audio_cache: spore_core::AudioCache,
+    pub(crate) spectrum: crate::spectrum_smoother::SpectrumSmoother,
 }
 
 impl TuiApp {
@@ -117,6 +118,7 @@ impl TuiApp {
             bg_rx,
             play_task: None,
             audio_cache,
+            spectrum: crate::spectrum_smoother::SpectrumSmoother::new(),
         })
     }
 
@@ -252,8 +254,14 @@ impl TuiApp {
         self.audio.status()
     }
 
-    pub fn current_spectrum(&self) -> [f32; 48] {
-        self.audio.spectrum_bands_48()
+    /// Smoothed spectrum bars (0.0..=1.0) as of the last `tick_spectrum`.
+    pub fn current_spectrum(&self) -> [f32; spore_core::spectrum::BANDS] {
+        self.spectrum.bars()
+    }
+
+    /// Advances the spectrum smoother to the current playback position. Call once per frame.
+    pub fn tick_spectrum(&mut self) {
+        self.spectrum.update(self.audio.current_spectrum());
     }
 
     pub fn is_logged_in(&self) -> bool {

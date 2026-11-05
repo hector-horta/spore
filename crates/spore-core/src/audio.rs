@@ -28,7 +28,7 @@ pub struct NativeAudioEngine {
     started_at: Mutex<Option<std::time::Instant>>,
     accumulated_ms: AtomicU64,
     state: AtomicU8,
-    spectrum_frames: Mutex<Vec<[u8; 32]>>,
+    spectrum: Mutex<Option<crate::spectrum::SpectrumTimeline>>,
 }
 
 impl NativeAudioEngine {
@@ -46,7 +46,7 @@ impl NativeAudioEngine {
             started_at: Mutex::new(None),
             accumulated_ms: AtomicU64::new(0),
             state: AtomicU8::new(STATE_STOPPED),
-            spectrum_frames: Mutex::new(Vec::with_capacity(128)),
+            spectrum: Mutex::new(None),
         })
     }
 
@@ -103,7 +103,7 @@ impl NativeAudioEngine {
         Ok((channels, sample_rate, pcm_samples))
     }
 
-    pub fn play_pcm_samples(&self, channels: u16, sample_rate: u32, pcm_samples: Vec<i16>) -> SporeResult<()> {
+    pub fn play_pcm_samples(&self, channels: u16, sample_rate: u32, pcm_samples: Vec<i16>, spectrum: Option<crate::spectrum::SpectrumTimeline>) -> SporeResult<()> {
         let total_samples = pcm_samples.len();
         let dur = total_samples as u64 / (sample_rate as u64 * channels as u64);
         self.duration_secs.store(dur, Ordering::SeqCst);
@@ -111,18 +111,7 @@ impl NativeAudioEngine {
         *self.started_at.lock().unwrap() = Some(std::time::Instant::now());
         self.state.store(STATE_PLAYING, Ordering::SeqCst);
 
-        // Precompute spectrum frames
-        let mut frames = Vec::new();
-        let chunk_size = (sample_rate as usize * channels as usize / 10).max(1); // 100ms chunks
-        for chunk in pcm_samples.chunks(chunk_size) {
-            let mut frame = [0u8; 32];
-            for (i, sample) in chunk.iter().step_by(chunk.len() / 32 + 1).enumerate().take(32) {
-                let amp = (sample.unsigned_abs() >> 8) as u8;
-                frame[i] = amp.min(100);
-            }
-            frames.push(frame);
-        }
-        *self.spectrum_frames.lock().unwrap() = frames;
+        *self.spectrum.lock().unwrap() = Some(spectrum.unwrap_or_else(|| crate::spectrum::analyze(&pcm_samples, channels, sample_rate)));
 
         if let Some(handle) = &self.handle {
             let sink = Sink::try_new(handle).map_err(|e| SporeError::Audio(e.to_string()))?;
@@ -138,7 +127,7 @@ impl NativeAudioEngine {
 
     pub fn play_encoded_bytes(&self, bytes: Vec<u8>, format: &str) -> SporeResult<()> {
         let (channels, rate, samples) = Self::decode_encoded_to_pcm(bytes, format)?;
-        self.play_pcm_samples(channels, rate, samples)
+        self.play_pcm_samples(channels, rate, samples, None)
     }
 
     pub fn pause(&self) {
@@ -171,7 +160,7 @@ impl NativeAudioEngine {
         self.state.store(STATE_STOPPED, Ordering::SeqCst);
         *self.started_at.lock().unwrap() = None;
         self.accumulated_ms.store(0, Ordering::SeqCst);
-        self.spectrum_frames.lock().unwrap().clear();
+        *self.spectrum.lock().unwrap() = None;
     }
 
     pub fn set_volume(&self, vol: f32) {
@@ -190,26 +179,38 @@ impl NativeAudioEngine {
         }
     }
 
-    pub fn progress_secs(&self) -> u64 {
+    pub fn progress_ms(&self) -> u64 {
+        let sink = self.sink.lock().unwrap();
+        if let Some(sink) = sink.as_ref() {
+            return sink.get_pos().as_millis() as u64;
+        }
+
+        let state = self.state.load(Ordering::SeqCst);
         let acc = self.accumulated_ms.load(Ordering::SeqCst);
-        let extra = if self.state.load(Ordering::SeqCst) == STATE_PLAYING {
+        let extra = if state == STATE_PLAYING {
             self.started_at.lock().unwrap().map(|t| t.elapsed().as_millis() as u64).unwrap_or(0)
         } else {
             0
         };
-        (acc + extra) / 1000
+        acc + extra
+    }
+
+    pub fn progress_secs(&self) -> u64 {
+        self.progress_ms() / 1000
     }
 
     pub fn duration_secs(&self) -> u64 {
         self.duration_secs.load(Ordering::SeqCst)
     }
 
-    pub fn current_spectrum_frame(&self) -> [u8; 32] {
-        let frames = self.spectrum_frames.lock().unwrap();
-        if frames.is_empty() { return [0u8; 32]; }
-        let progress_ms = self.progress_secs() * 1000;
-        let idx = (progress_ms / 100) as usize;
-        frames.get(idx).copied().unwrap_or_else(|| *frames.last().unwrap_or(&[0u8; 32]))
+    pub fn current_spectrum(&self) -> [f32; crate::spectrum::BANDS] {
+        if self.state.load(Ordering::SeqCst) != STATE_PLAYING {
+            return [0.0; crate::spectrum::BANDS];
+        }
+        let ms = self.progress_ms();
+        self.spectrum.lock().unwrap().as_ref()
+            .map(|t| t.frame_at(ms))
+            .unwrap_or([0.0; crate::spectrum::BANDS])
     }
     pub fn is_finished(&self) -> bool {
         if let Some(sink) = self.sink.lock().unwrap().as_ref() {
@@ -229,17 +230,8 @@ impl NativeAudioEngine {
 
     pub fn progress(&self) -> (std::time::Duration, std::time::Duration) {
         (
-            std::time::Duration::from_secs(self.progress_secs()),
+            std::time::Duration::from_millis(self.progress_ms()),
             std::time::Duration::from_secs(self.duration_secs()),
         )
-    }
-
-    pub fn spectrum_bands_48(&self) -> [f32; 48] {
-        let f = self.current_spectrum_frame();
-        let mut out = [0.0f32; 48];
-        for i in 0..48 {
-            out[i] = f[(i * 32) / 48] as f32;
-        }
-        out
     }
 }
