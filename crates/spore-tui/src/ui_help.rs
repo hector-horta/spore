@@ -63,37 +63,23 @@ pub fn render_help(frame: &mut Frame<'_>, area: Rect, app: &TuiApp, nav_line: Li
 
     if app.language == Language::Es {
         auth_content.extend_from_slice(&[
-            Line::from(vec![Span::styled("Autenticación Spotify Connect / OAuth:", Style::default().bold())]),
-            Line::from(vec![Span::styled(
-                "1. Presiona 'u' para abrir flujo OAuth2 PKCE",
-                Style::default()
-            )]),
-            Line::from(vec![Span::styled(
-                "2. O configurar SPOTIFY_CLIENT_ID en variables de entorno",
-                Style::default()
-            )]),
-            Line::from(vec![Span::styled(
-                "3. Soporte Spotify Connect para control remoto",
-                Style::default().italic(),
-            )])
+            Line::from(vec![Span::styled("Configurar Spotify Client ID:", Style::default().bold().fg(Color::Yellow))]),
+            Line::from(vec![Span::styled("1. Ve a developer.spotify.com/dashboard", Style::default())]),
+            Line::from(vec![Span::styled("2. Crea una App y añade Redirect URI:", Style::default())]),
+            Line::from(vec![Span::styled("   http://127.0.0.1:8888/callback", Style::default().fg(Color::Green))]),
+            Line::from(vec![Span::styled("3. En PowerShell ejecuta:", Style::default())]),
+            Line::from(vec![Span::styled("   $env:SPOTIFY_CLIENT_ID=\"tu_client_id\"", Style::default().italic().fg(Color::Green))]),
+            Line::from(vec![Span::styled("4. Presiona 'u' en Spore para autorizar", Style::default())]),
         ]);
     } else {
         auth_content.extend_from_slice(&[
-            Line::from(vec![Span::styled(
-                "Spotify Connect / OAuth Authentication:", Style::default().bold()
-            )]),
-            Line::from(vec![Span::styled(
-                "1. Press 'u' for interactive OAuth2 PKCE",
-                Style::default()
-            )]),
-            Line::from(vec![Span::styled(
-                "2. Or export SPOTIFY_CLIENT_ID in your environment",
-                Style::default()
-            )]),
-            Line::from(vec![Span::styled(
-                "3. Native Spotify Connect receiver supported",
-                Style::default().italic(),
-            )])
+            Line::from(vec![Span::styled("Setup Spotify Client ID:", Style::default().bold().fg(Color::Yellow))]),
+            Line::from(vec![Span::styled("1. Go to developer.spotify.com/dashboard", Style::default())]),
+            Line::from(vec![Span::styled("2. Create an App & add Redirect URI:", Style::default())]),
+            Line::from(vec![Span::styled("   http://127.0.0.1:8888/callback", Style::default().fg(Color::Green))]),
+            Line::from(vec![Span::styled("3. In terminal run:", Style::default())]),
+            Line::from(vec![Span::styled("   $env:SPOTIFY_CLIENT_ID=\"your_client_id\"", Style::default().italic().fg(Color::Green))]),
+            Line::from(vec![Span::styled("4. Press 'u' in Spore to authorize", Style::default())]),
         ]);
     }
 

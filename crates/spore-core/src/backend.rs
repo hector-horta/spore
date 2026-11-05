@@ -228,11 +228,17 @@ impl StreamingBackend for SpotifyBackend {
 
     async fn login(&mut self) -> SporeResult<()> {
         let client_id = self.client_id();
+        if client_id == DEFAULT_SPOTIFY_CLIENT_ID {
+            // Advertir si usa el client_id de ejemplo no registrado
+            tracing::warn!("Usando DEFAULT_SPOTIFY_CLIENT_ID de ejemplo. Registra tu Client ID en developer.spotify.com");
+        }
         let pkce = PkceSession::new();
         let auth_url = build_authorize_url(&client_id, &pkce);
         Self::open_browser(&auth_url);
 
-        let code = listen_for_code(8888, 60).await?;
+        let code = listen_for_code(8888, 60).await.map_err(|e| {
+            SporeError::Auth(format!("{e}. Verifica que tu Client ID sea valido y tenga Redirect URI: http://127.0.0.1:8888/callback"))
+        })?;
 
         let tokens = exchange_code_for_tokens(&self.http, &client_id, &code, &pkce.verifier).await?;
         tokens.save_to_disk()?;
