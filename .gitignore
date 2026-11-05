@@ -1,0 +1,10 @@
+/target/
+**/*.rs.bk
+*.sqlite
+*.db
+*.bin
+*.part
+spore_cache.db
+spore_auth.json
+.DS_Store
+Thumbs.db
