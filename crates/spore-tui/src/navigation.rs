@@ -2,10 +2,21 @@ use crate::app::{TuiApp, ActiveView};
 use spore_core::StreamingBackend;
 
 impl TuiApp {
-    /// Synchronizes the user's playlists with Spotify.
-    pub async fn sync_playlists(&mut self) {
+    /// Starts a background sync of the user's playlists (may wait on Spotify 429 back-off).
+    pub fn sync_playlists(&mut self) {
         self.active_view = ActiveView::Playlists;
-        match self.backend.fetch_user_playlists().await {
+        self.status_message = "⏳ Sincronizando playlists con Spotify (puede tardar si hay límite de cuota)...".to_string();
+        let tx = self.bg_tx.clone();
+        let backend = self.backend.clone();
+        tokio::spawn(async move {
+            let res = backend.fetch_user_playlists().await.map_err(|e| e.to_string());
+            let _ = tx.send(crate::playback::BgEvent::PlaylistsSynced(res));
+        });
+    }
+
+    /// Applies the result of a background playlist sync.
+    pub fn apply_playlists(&mut self, res: Result<Vec<spore_core::UserPlaylist>, String>) {
+        match res {
             Ok(playlists) => {
                 self.status_message = format!("Playlists sincronizadas: {} listas encontradas (Enter para abrir).", playlists.len());
                 self.playlists = playlists;

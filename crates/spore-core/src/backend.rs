@@ -78,16 +78,20 @@ impl SpotifyBackend {
         let Some(token) = self.ensure_valid_token().await else {
             return Err(SporeError::Auth("Inicia sesión presionando 'u'.".to_string()));
         };
+        // The shared public Client ID routinely answers 429 with Retry-After of 15–30s,
+        // so honor it a few times (capped) instead of failing on the first long wait.
         let mut resp = self.http.get(url).bearer_auth(&token).send().await.map_err(SporeError::Network)?;
-        if resp.status().as_u16() == 429 {
+        for _ in 0..3 {
+            if resp.status().as_u16() != 429 { break; }
             let wait = resp.headers().get("retry-after").and_then(|v| v.to_str().ok()).and_then(|s| s.parse::<u64>().ok()).unwrap_or(3);
-            if wait <= 15 {
-                tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
-                resp = self.http.get(url).bearer_auth(&token).send().await.map_err(SporeError::Network)?;
+            if wait > 60 {
+                return Err(SporeError::Spotify(format!("Cuota de Spotify saturada (429). Reintenta en {wait}s")));
             }
-            if resp.status().as_u16() == 429 {
-                return Err(SporeError::Spotify(format!("Cuota pública saturada (429). Reintenta en {wait}s")));
-            }
+            tokio::time::sleep(std::time::Duration::from_secs(wait + 1)).await;
+            resp = self.http.get(url).bearer_auth(&token).send().await.map_err(SporeError::Network)?;
+        }
+        if resp.status().as_u16() == 429 {
+            return Err(SporeError::Spotify("Cuota de Spotify saturada (429). Usa tu propio Client ID (ver '?').".to_string()));
         }
         if !resp.status().is_success() {
             return Err(SporeError::Spotify(format!("Spotify API error: {}", resp.status())));
