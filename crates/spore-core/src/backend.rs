@@ -81,12 +81,12 @@ impl SpotifyBackend {
         let mut resp = self.http.get(url).bearer_auth(&token).send().await.map_err(SporeError::Network)?;
         if resp.status().as_u16() == 429 {
             let wait = resp.headers().get("retry-after").and_then(|v| v.to_str().ok()).and_then(|s| s.parse::<u64>().ok()).unwrap_or(3);
-            if wait <= 4 {
+            if wait <= 15 {
                 tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
                 resp = self.http.get(url).bearer_auth(&token).send().await.map_err(SporeError::Network)?;
             }
             if resp.status().as_u16() == 429 {
-                return Err(SporeError::Spotify(format!("Cuota pública saturada (429). Espera {wait}s")));
+                return Err(SporeError::Spotify(format!("Cuota pública saturada (429). Reintenta en {wait}s")));
             }
         }
         if !resp.status().is_success() {
