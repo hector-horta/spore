@@ -7,6 +7,7 @@ pub enum BgEvent {
     AudioReady(Track, Result<AudioStreamSource, String>, Vec<spore_core::LyricLine>, String),
     ArtworkReady(String, TerminalCoverArt),
     PlaylistReady(String, Result<Vec<Track>, String>),
+    PlaylistsSynced(Result<Vec<spore_core::UserPlaylist>, String>),
 }
 
 impl TuiApp {
@@ -58,9 +59,13 @@ impl TuiApp {
                     self.status_message = format!("Reproduciendo '{}' ({} pistas)...", name, self.queue.len());
                     self.play_next().await;
                 }
-                BgEvent::PlaylistReady(name, _) => {
-                    self.status_message = format!("No se pudo cargar playlist '{name}'.");
+                BgEvent::PlaylistReady(name, Err(e)) => {
+                    self.status_message = format!("No se pudo cargar playlist '{name}': {e}");
                 }
+                BgEvent::PlaylistReady(name, _) => {
+                    self.status_message = format!("Playlist '{name}' vacía o sin pistas reproducibles.");
+                }
+                BgEvent::PlaylistsSynced(res) => self.apply_playlists(res),
             }
         }
     }

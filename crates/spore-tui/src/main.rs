@@ -98,11 +98,7 @@ async fn run_event_loop(
                             terminal.draw(|f| ui::render(f, app))?;
                             app.sync_library().await;
                         }
-KeyCode::Char('5') => {
-    app.status_message = "Sincronizando 5 — Tus Playlists de Spotify...".to_string();
-    terminal.draw(|f| ui::render(f, app))?;
-    app.sync_playlists().await;
-},
+                        KeyCode::Char('5') => app.sync_playlists(),
 
 KeyCode::Char('p') | KeyCode::Char('P') => {
     app.status_message = "Reproduciendo toda la playlist / lista actual...".to_string();
